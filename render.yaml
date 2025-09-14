@@ -4,14 +4,14 @@ services:
     env: node
     plan: free
     buildCommand: npm install
-    startCommand: npm start
+    startCommand: node src/mcp-server-universal.js
     envVars:
       - key: NODE_VERSION
         value: 20
       - key: VAPI_API_KEY
         value: 8556bec9-72d2-4ef6-8239-92d07780088e
       - key: VAPI_PHONE_ID
-        value: 328097e2-8e76-433e-b900-d9b4ac3ad88b
+        value: 097c870c-6ad5-49d4-ac10-844ebb43a8aa
       - key: VAPI_ASSISTANT_ID
         value: dca10f6b-d35f-4b9f-b2cd-05faa8671269
       - key: PORT
