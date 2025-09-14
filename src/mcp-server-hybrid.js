@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 /**
- * FastMCP Server for Poke Integration
- * Following the exact pattern from InteractionCo/mcp-server-template
+ * Hybrid MCP Server for Poke Integration
+ * Combines FastMCP with fallback handling for problematic clients
  */
 
 import { FastMCP } from "fastmcp";
@@ -28,39 +28,7 @@ const vapiAxios = axios.create({
   }
 });
 
-// Initialize FastMCP server with enhanced configuration
-const server = new FastMCP({
-  name: "calli-poke",
-  version: "1.0.0"
-});
-
-// Enable debug logging for session management
-console.log('🔧 [FASTMCP] Initializing server with session management...');
-
-// Add the make_phone_call tool
-server.addTool({
-  name: "make_phone_call",
-  description: "Make a phone call to schedule appointments at restaurants, medical offices, salons, or any business",
-  parameters: z.object({
-    phone_number: z.string().describe("Phone number to call (e.g., '619-853-2051' or '+1-619-853-2051')"),
-    request_message: z.string().describe("What you want to schedule (e.g., 'book a table for 2 at Luigi's tonight at 7:30 PM')"),
-    user_name: z.string().default("Customer").describe("Name of the person making the appointment")
-  }),
-  execute: async ({ phone_number, request_message, user_name }) => {
-    console.log('🔄 [TOOL_EXECUTE] make_phone_call invoked');
-    console.log(`📞 Input - Phone: "${phone_number}", Message: "${request_message}", User: "${user_name}"`);
-
-    try {
-      const result = await makePhoneCall({ phone_number, request_message, user_name });
-      console.log('✅ [TOOL_SUCCESS] Call completed successfully');
-      return result;
-    } catch (error) {
-      console.error('❌ [TOOL_ERROR] Call failed:', error.message);
-      throw error;
-    }
-  }
-});
-
+// Phone call function (same as before)
 async function makePhoneCall({ phone_number, request_message, user_name = "Customer" }) {
   console.log(`🔄 [makePhoneCall] Starting call process for ${user_name}`);
   console.log(`📞 Raw phone number: "${phone_number}"`);
@@ -76,7 +44,6 @@ async function makePhoneCall({ phone_number, request_message, user_name = "Custo
     } else if (cleanPhone.length === 11 && cleanPhone.startsWith('1')) {
       cleanPhone = '+' + cleanPhone;
     } else if (cleanPhone.length === 7) {
-      // Assume local number, need area code - this would be an error
       throw new Error(`Invalid phone number format: "${phone_number}". Please include area code.`);
     } else {
       throw new Error(`Invalid phone number format: "${phone_number}". Expected format: +1234567890 or (123) 456-7890`);
@@ -117,7 +84,7 @@ async function makePhoneCall({ phone_number, request_message, user_name = "Custo
     /(monday|tuesday|wednesday|thursday|friday|saturday|sunday)(?:\s+night|\s+evening)?/i,
     /(this|next)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i,
     /(this|next)\s+(week|weekend)/i,
-    /(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/,  // 12/25 or 12/25/2024
+    /(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/,
     /(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})/i
   ];
   let datePrefs = '';
@@ -131,17 +98,11 @@ async function makePhoneCall({ phone_number, request_message, user_name = "Custo
 
   // Enhanced venue name extraction
   const venuePatterns = [
-    // "book a table at Luigi's Pizza"
     /(?:at|to)\s+([A-Za-z0-9'\s&.,-]+?)(?:\s+(?:for|on|at|tonight|today|tomorrow)|\s*$)/i,
-    // "Luigi's Pizza for tonight"
     /^(.+?)\s+(?:for|on|at|tonight|today|tomorrow)/i,
-    // "make a reservation at The Cheesecake Factory"
     /reservation\s+at\s+([A-Za-z0-9'\s&.,-]+?)(?:\s+(?:for|on|at|tonight|today|tomorrow)|\s*$)/i,
-    // "call Luigi's Pizza"
     /call\s+([A-Za-z0-9'\s&.,-]+?)(?:\s+(?:for|to|about|regarding)|\s*$)/i,
-    // "book Luigi's for 2 people"
     /book\s+([A-Za-z0-9'\s&.,-]+?)(?:\s+for|\s*$)/i,
-    // General pattern for restaurant names
     /([A-Za-z0-9'\s&.,-]{2,30})(?:\s+(?:restaurant|cafe|pizza|grill|bistro|bar|diner))?/i
   ];
 
@@ -150,10 +111,9 @@ async function makePhoneCall({ phone_number, request_message, user_name = "Custo
     const match = request_message.match(pattern);
     if (match && match[1]) {
       venueName = match[1].trim();
-      // Clean up venue name
-      venueName = venueName.replace(/^(the|a|an)\s+/i, ''); // Remove articles
-      venueName = venueName.replace(/\s+(restaurant|cafe|pizza|grill|bistro|bar|diner)$/i, ''); // Remove type suffixes
-      if (venueName.length > 2) { // Only use if meaningful
+      venueName = venueName.replace(/^(the|a|an)\s+/i, '');
+      venueName = venueName.replace(/\s+(restaurant|cafe|pizza|grill|bistro|bar|diner)$/i, '');
+      if (venueName.length > 2) {
         break;
       }
     }
@@ -231,7 +191,6 @@ Calli AI is now making the call. You'll receive a follow-up message with the res
       console.error('   Response headers:', JSON.stringify(error.response.headers, null, 2));
       console.error('   Response data:', JSON.stringify(error.response.data, null, 2));
 
-      // Provide more specific error messages based on status codes
       switch (error.response.status) {
         case 401:
           throw new Error(`Authentication failed: Invalid VAPI API key`);
@@ -258,86 +217,102 @@ Calli AI is now making the call. You'll receive a follow-up message with the res
   }
 }
 
-// Enhanced server setup with session management and fallbacks
+// Initialize FastMCP server
+console.log('🔧 [HYBRID] Initializing FastMCP server...');
 
+const server = new FastMCP({
+  name: "calli-poke",
+  version: "1.0.0"
+});
+
+server.addTool({
+  name: "make_phone_call",
+  description: "Make a phone call to schedule appointments at restaurants, medical offices, salons, or any business",
+  parameters: z.object({
+    phone_number: z.string().describe("Phone number to call (e.g., '619-853-2051' or '+1-619-853-2051')"),
+    request_message: z.string().describe("What you want to schedule (e.g., 'book a table for 2 at Luigi's tonight at 7:30 PM')"),
+    user_name: z.string().default("Customer").describe("Name of the person making the appointment")
+  }),
+  execute: async ({ phone_number, request_message, user_name }) => {
+    console.log('📞 [TOOL_CALL] make_phone_call invoked via FastMCP');
+    return await makePhoneCall({ phone_number, request_message, user_name });
+  }
+});
+
+// Setup server with simple configuration
 const port = parseInt(process.env.PORT || "8000");
 const host = "0.0.0.0";
 
-console.log(`🚀 [SERVER] Starting enhanced MCP server on ${host}:${port}`);
+console.log(`🚀 [HYBRID] Starting server on ${host}:${port}`);
 
-// Create Express app for additional endpoints and debugging
-const app = express();
-app.use(express.json());
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'healthy',
-    service: 'Calli Poke MCP Server',
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Debug endpoint to show server status
-app.get('/debug', (req, res) => {
-  res.json({
-    server: 'FastMCP Calli Poke',
-    version: '1.0.0',
-    tools: ['make_phone_call'],
-    mcpEndpoint: '/mcp',
-    timestamp: new Date().toISOString(),
-    environment: {
-      vapiKey: VAPI_API_KEY ? 'Present' : 'Missing',
-      vapiPhone: VAPI_PHONE_ID ? 'Present' : 'Missing',
-      vapiAssistant: VAPI_ASSISTANT_ID ? 'Present' : 'Missing'
-    }
-  });
-});
-
-// Enhanced MCP endpoint with request logging
-app.use('/mcp', (req, res, next) => {
-  console.log(`📥 [MCP_REQUEST] ${req.method} ${req.path}`);
-  console.log(`🔍 [MCP_HEADERS] ${JSON.stringify(req.headers, null, 2)}`);
-
-  if (req.body && Object.keys(req.body).length > 0) {
-    console.log(`📋 [MCP_BODY] ${JSON.stringify(req.body, null, 2)}`);
-  }
-
-  // Track session information if available
-  const sessionId = req.headers['mcp-session-id'] || req.body?.sessionId;
-  if (sessionId) {
-    console.log(`🔐 [SESSION] ID found: ${sessionId}`);
-  } else {
-    console.log(`⚠️  [SESSION] No session ID in request`);
-  }
-
-  next();
-});
-
-// Start FastMCP server with httpStream transport
 try {
-  console.log('🔧 [FASTMCP] Configuring transport...');
-
+  // Try FastMCP first
   server.start({
     transportType: "httpStream",
     httpStream: {
       port: port,
       endpoint: "/mcp",
-      host: host,
-      // Add CORS and session handling
-      middleware: app
+      host: host
     }
   });
 
-  console.log(`✅ [FASTMCP] Server running on ${host}:${port}/mcp`);
-  console.log(`🔍 [DEBUG] Debug endpoint available at ${host}:${port}/debug`);
-  console.log(`💓 [HEALTH] Health check available at ${host}:${port}/health`);
+  console.log(`✅ [FASTMCP] Server running successfully on ${host}:${port}/mcp`);
 
 } catch (error) {
-  console.error('❌ [STARTUP] FastMCP server failed to start:', error);
+  console.error('❌ [FASTMCP_ERROR] Failed to start FastMCP server:', error);
 
-  // Fallback to basic Express server
-  console.log('🔄 [FALLBACK] Starting fallback Express server...');
+  // Fallback to express server with manual MCP handling
+  console.log('🔄 [FALLBACK] Starting Express fallback server...');
+
+  const app = express();
+  app.use(express.json());
+
+  // Health endpoint
+  app.get('/health', (req, res) => {
+    res.json({ status: 'healthy', server: 'Calli Poke Fallback' });
+  });
+
+  // Simple MCP endpoint that handles tool calls directly
+  app.post('/mcp', async (req, res) => {
+    console.log('📥 [FALLBACK] MCP request received');
+    console.log('Body:', JSON.stringify(req.body, null, 2));
+
+    try {
+      const { method, params } = req.body;
+
+      if (method === 'initialize') {
+        res.json({
+          jsonrpc: "2.0",
+          id: req.body.id,
+          result: {
+            protocolVersion: "2024-11-05",
+            capabilities: { tools: {} },
+            serverInfo: { name: "calli-poke", version: "1.0.0" }
+          }
+        });
+      } else if (method === 'tools/call' && params?.name === 'make_phone_call') {
+        const result = await makePhoneCall(params.arguments);
+        res.json({
+          jsonrpc: "2.0",
+          id: req.body.id,
+          result: { content: [{ type: "text", text: result }] }
+        });
+      } else {
+        res.status(400).json({
+          jsonrpc: "2.0",
+          id: req.body.id,
+          error: { code: -32601, message: "Method not found" }
+        });
+      }
+    } catch (error) {
+      console.error('❌ [FALLBACK_ERROR]:', error);
+      res.status(500).json({
+        jsonrpc: "2.0",
+        id: req.body.id,
+        error: { code: -32603, message: error.message }
+      });
+    }
+  });
 
   app.listen(port, host, () => {
     console.log(`⚡ [FALLBACK] Express server running on ${host}:${port}`);
