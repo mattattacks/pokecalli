@@ -1,0 +1,598 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2822
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;\f1\fnil\fcharset0 .SFNS-Semibold;\f2\fnil\fcharset0 .SFNS-Regular;
+\f3\fnil\fcharset0 HelveticaNeue-Bold;\f4\fnil\fcharset0 .SFNS-RegularItalic;\f5\fnil\fcharset0 .AppleSystemUIFontMonospaced-Regular;
+\f6\fmodern\fcharset0 Courier;\f7\fnil\fcharset0 HelveticaNeue-BoldItalic;}
+{\colortbl;\red255\green255\blue255;\red14\green14\blue14;\red151\green0\blue126;\red0\green0\blue0;
+\red111\green90\blue30;\red181\green0\blue19;\red13\green100\blue1;\red0\green0\blue0;\red20\green0\blue196;
+}
+{\*\expandedcolortbl;;\cssrgb\c6700\c6700\c6700;\cssrgb\c66667\c5098\c56863;\csgray\c0;
+\cssrgb\c51373\c42353\c15686;\cssrgb\c76863\c10196\c8627;\cssrgb\c0\c45490\c0;\cssrgb\c0\c0\c0;\cssrgb\c10980\c0\c81176;
+}
+\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 Here is the readme of steps to take to create our poke caller. Here is the GitHub we can operate from: https://github.com/mattattacks/pokecalli\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\b\fs44 \cf2 Game Plan: Building an AI Scheduling Assistant with VAPI for the Poke MCP Challenge
+\f2\b0\fs28 \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\b\fs34 \cf2 Understanding the Poke Challenge Requirements
+\f2\b0\fs28 \
+\
+The HackMIT sponsor challenge from 
+\f3\b Interaction Co.
+\f2\b0  (makers of Poke) is about creating 
+\f3\b Poke Automations
+\f2\b0  \'96 custom actions triggered by incoming emails or on a schedule . Essentially, when a user receives an email (or sends a command to Poke) indicating a task, an automation should carry it out. Examples given include sending email replies, scheduling meetings, reminders, or even automating tasks like watering plants . The challenge encourages building novel or even \'93wacky\'94 automations, with prizes for categories like 
+\f3\b Most Technically Impressive
+\f2\b0 , 
+\f3\b Most Fun
+\f2\b0 , 
+\f3\b Most Practical
+\f2\b0 , etc., to reward creativity and complexity  .\
+\
+To facilitate integration, the Poke team provided a 
+\f3\b Model Context Protocol (MCP) server template
+\f2\b0  for quick deployment . This template is pre-configured to work with Poke, making it easy to set up a server that Poke can communicate with. Participants can add a new MCP integration via their Poke settings , deploy the template with one click, and (if developing locally or on an unverified domain) ask the Poke team to 
+\f3\b \'93disable the bouncer\'94
+\f2\b0  (a security feature) for their account . In short, Poke will forward relevant email content or trigger data to your MCP server, and expect your server to perform the automation and respond with results.\
+\
+For our project, we will focus on 
+\f3\b Idea 1: an Automatic AI Scheduler
+\f2\b0 . This automation will read an email or user command like: 
+\f4\i \'93Make me a reservation at Turoni\'92s for 8:30 PM Friday. Here is their number: 812-555-1234.\'94
+\f2\i0  Upon receiving this request, Poke should activate our integration, which then uses a voice AI agent to 
+\f3\b call the restaurant and make the reservation
+\f2\b0  on the user\'92s behalf. This addresses the challenge by turning a simple email/text request into a real-world action (a phone call), demonstrating a powerful utility of Poke (executing tasks from communications) .\
+\
+Before diving into implementation, here\'92s an overview of the technical components we\'92ll leverage:\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	
+\f3\b Poke MCP Integration
+\f2\b0  \'96 the bridge that delivers the user\'92s request (from email) to our code and returns the outcome back to Poke (so Poke can inform the user). We can use the provided template server  or connect to a remote service.\
+	\'95	
+\f3\b VAPI (Voice API)
+\f2\b0  \'96 a voice AI platform that allows us to programmatically initiate phone calls with AI-driven speech agents. We\'92ll use VAPI to handle the actual call to the restaurant: a GPT-4-powered agent will speak to the restaurant staff to book the table, then return a summary/confirmation.\
+	\'95	
+\f3\b VAPI Voice Agent (Call Assistant)
+\f2\b0  \'96 a custom AI persona (\'93Calli\'94) configured with a special system prompt to handle scheduling calls. This agent will be the one conversing on the phone. We have a detailed prompt for Calli defining her behavior: friendly and efficient, asking one question at a time, gathering all booking details, offering alternatives if needed, and providing a clear confirmation at the end. It\'92s designed to handle various scenarios (deposits, no availability, special requests, etc.) and finally output both a brief summary and a structured JSON of the reservation details for downstream use.\
+\
+Using these tools, we aim to build the solution 
+\f3\b as lean as possible
+\f2\b0  by reusing existing components: the Poke MCP template (or VAPI\'92s own MCP service) and VAPI\'92s SDKs and agent configuration. Below is a step-by-step plan with relevant resources.\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\b\fs34 \cf2 Technical Stack and Key Resources
+\f2\b0\fs28 \
+\
+
+\f3\b Poke MCP Template (Integration Server):
+\f2\b0  The Interaction Co. provides a verified server template for MCP integrations . This template can be deployed with one click (e.g. to Heroku, Vercel, etc.) and comes pre-wired to communicate with Poke. Using this means less time on boilerplate \'96 you can focus on your automation logic. (The template repository is on GitHub here: 
+\f3\b InteractionCo/mcp-server-template
+\f2\b0 .)\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	
+\f4\i Alternative:
+\f2\i0  Instead of hosting your own, note that 
+\f3\b VAPI offers a hosted MCP server
+\f2\b0  that we can directly use. VAPI\'92s open-source MCP server (TypeScript) can run locally or be accessed as a cloud service. In fact, you can connect to VAPI\'92s 
+\f3\b remote MCP endpoint
+\f2\b0  at 
+\f5 https://mcp.vapi.ai/mcp
+\f2  with your API key  \'96 this allows Poke to call VAPI\'92s MCP server without you deploying anything. This remote service already implements actions like creating calls, listing assistants, etc., over the MCP protocol  . We\'92ll discuss how this can be used for quick integration.\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f3\b \cf2 VAPI Voice AI Platform:
+\f2\b0  VAPI (Voice AI for developers) provides the core functionality for making the phone call with an AI agent. Key resources from VAPI include:\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	
+\f3\b VAPI API/SDK:
+\f2\b0  We can use VAPI\'92s Server SDKs (Python, Node/TypeScript, etc.) to initiate outbound calls from our code. For example, using the Node SDK, creating a call is as simple as:
+\f0\fs24 \cf0 \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f6\fs28 \cf3 const\cf4  call = \cf3 await\cf4  vapi.calls.create(\{\
+    \cf5 phoneNumberId\cf4 : \cf6 "YOUR_PHONE_NUMBER_ID"\cf4 ,\
+    \cf5 customer\cf4 : \{ \cf5 number\cf4 : \cf6 "+1XXXXXXXXXX"\cf4  \},  \cf7 // the restaurant\'92s phone number\cf4 \
+    \cf5 assistantId\cf4 : \cf6 "YOUR_ASSISTANT_ID"\cf4        \cf7 // our AI assistant's ID on VAPI\cf4 \
+\});\
+console.log(\cf6 `Call created: \cf8 $\{call.id\}\cf6 `\cf4 );
+\f0\fs24 \cf0 \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\fi260\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f4\i\fs28 \cf2 (From VAPI docs example )
+\f2\i0 . This call setup will ring the restaurant and have the AI assistant begin speaking once the call connects.\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+\cf2 \
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	
+\f3\b VAPI Dashboard and Repos:
+\f2\b0  VAPI\'92s GitHub organization 
+\f3\b vapiai
+\f2\b0  hosts multiple SDKs and examples (e.g., client SDKs for web, server SDKs, etc.). Notably, the 
+\f3\b VapiAI/server-sdk-typescript
+\f2\b0  and 
+\f3\b server-sdk-python
+\f2\b0  repos contain libraries to easily call VAPI\'92s REST API. The 
+\f3\b VapiAI/mcp-server
+\f2\b0  repo is the aforementioned MCP server implementation (with support for actions like 
+\f5 create_call
+\f2  built-in) . For quick reference, the official VAPI docs   and API reference are available as well .\
+	\'95	
+\f3\b Custom Voice Assistant (\'93Calli\'94):
+\f2\b0  We will create a VAPI 
+\f3\b assistant
+\f2\b0  (AI agent) specifically for handling scheduling calls. VAPI allows defining an assistant with:\
+\pard\tqr\tx500\tx660\li660\fi-400\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	A 
+\f3\b Voice
+\f2\b0  (e.g., choose a realistic TTS voice \'96 in our JSON config, we use \'93Elliot\'94).\
+	\'95	A 
+\f3\b LLM Model
+\f2\b0  and prompt: we\'92ll use GPT-4 (notated as 
+\f5 gpt-4o
+\f2  on VAPI for GPT-4 with optimized context) with a carefully crafted system prompt. The system prompt (provided in the question\'92s JSON) establishes Calli\'92s persona and instructs her on the flow of the call (what to say, what info to collect, how to respond in various scenarios, etc.).\
+	\'95	
+\f3\b Tools or APIs (optional):
+\f2\b0  VAPI assistants can use tools (custom functions, knowledge bases, etc.) if needed  . For our MVP, we likely don\'92t need extra tools since the agent will handle the conversation itself. (If we wanted to integrate something like checking calendar availability via API, we could define a custom tool and add it to the assistant  , but to keep things lean we rely on talking to the human on the other end.)\
+We will incorporate placeholders in the prompt for dynamic values like 
+\f3\b [USER_NAME]
+\f2\b0  (the name the reservation is under), 
+\f3\b [REQUEST_CONTEXT]
+\f2\b0  (the basic ask, e.g. \'93reservation for 2 at 8:30pm Friday at Turoni\'92s\'94), or other details. VAPI supports injecting 
+\f3\b variable values
+\f2\b0  at call-time via 
+\f5 assistantOverrides
+\f2  in the API request . This means we can reuse one assistant template and just pass in the specific details for each call (so Calli knows 
+\f4\i who
+\f2\i0  she\'92s calling for and 
+\f4\i what
+\f2\i0  they want). According to VAPI\'92s docs, 
+\f5 create_call
+\f2  supports dynamic variables through 
+\f5 assistantOverrides.variableValues
+\f2  to personalize the assistant\'92s dialogue .\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	
+\f3\b Structured Output:
+\f2\b0  We\'92ll take advantage of Calli\'92s prompt which is designed to output a structured JSON summary at call end. For example, after booking, the assistant might output JSON like:
+\f0\fs24 \cf0 \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f6\fs28 \cf4 \{\
+  \cf5 "status"\cf4 : \cf6 "booked"\cf4 ,\
+  \cf5 "venue"\cf4 : \{ \cf5 "name"\cf4 : \cf6 "Turoni's"\cf4 , \cf5 "phone"\cf4 : \cf6 "812-555-1234"\cf4  \},\
+  \cf5 "reservation"\cf4 : \{ \cf5 "date"\cf4 : \cf6 "2025-09-15"\cf4 , \cf5 "time_local"\cf4 : \cf6 "20:30"\cf4 , \cf5 "party_size"\cf4 : \cf9 2\cf4 , ... \},\
+  \cf5 "confirmation"\cf4 : \{ \cf5 "code"\cf4 : \cf6 "ABC123"\cf4 , \cf5 "name_on_booking"\cf4 : \cf6 "Alice"\cf4 , ... \},\
+  \cf5 "notes"\cf4 : \cf6 "They will hold the table for 10 min past reservation."\cf4 ,\
+  ...\
+\}
+\f0\fs24 \cf0 \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\fi260\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f2\fs28 \cf2 along with a human-readable summary. This structured result will make it easy to programmatically use the outcome (e.g., include details in an email back to the user). We\'92ll need to capture this output from the VAPI call.\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f3\b \cf2 Additional Considerations:
+\f2\b0  We will need a 
+\f3\b phone number
+\f2\b0  to make the call from VAPI. VAPI can provide virtual numbers for your account (via the dashboard or API). You\'92ll register or purchase a number (likely a free trial number is provided) that will serve as the caller ID when Calli calls the restaurant. This number can also handle inbound if the restaurant calls back, but for our scope we mainly need outbound calling.\
+\
+Now that we have the context and tools, let\'92s outline the step-by-step implementation plan.\
+\
+
+\f1\b\fs34 Step-by-Step Implementation Plan
+\f2\b0\fs28 \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\b\fs30 \cf2 1. Set Up the Poke MCP Integration
+\f2\b0\fs28 \
+\
+First, create a new integration in Poke so it knows where to send the automation requests. In your Poke account settings, go to 
+\f3\b Connections \uc0\u8594  Integrations \u8594  Add New
+\f2\b0  . You will need to provide a 
+\f3\b Webhook URL
+\f2\b0  or endpoint for Poke to contact. There are two main approaches here:\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	
+\f3\b Deploy a Custom MCP Server:
+\f2\b0  Use the official 
+\f3\b mcp-server-template
+\f2\b0  provided by Interaction Co. for a quick start . This template is a Node.js server that conforms to Poke\'92s MCP. You can deploy it easily (the GitHub repo likely has a \'93Deploy to Heroku/Vercel\'94 button). Once deployed, you\'92ll get a URL; supply that as your integration\'92s URL. The template will handle authentication and the basic protocol. You can then modify its code to implement our specific logic (essentially in the route handler where it receives a request from Poke, we will add code to trigger the VAPI call \'96 more on that in step 4).\
+	\'95	
+\f3\b Use VAPI\'92s Hosted MCP Service (No Deploy):
+\f2\b0  VAPI\'92s own MCP server can be reached at 
+\f5 https://mcp.vapi.ai/mcp
+\f2  . This is a cloud endpoint that already knows how to handle certain actions via MCP (like creating calls, etc.). To use it, you would configure the integration to connect to that URL. You also need to provide your VAPI API key for authorization, presumably in the HTTP 
+\f5 Authorization
+\f2  header (bearer token) as per VAPI\'92s instructions . Check how Poke expects to handle auth for integrations \'96 you might include the token in the URL or in a config field. If unsure, the safer route is deploying your own server (previous bullet) and having that server use the VAPI API with the key.\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f3\b \cf2 Bouncer Note:
+\f2\b0  If you deploy locally (for testing) or to a non-HTTPS/temporary domain, Poke might block the request for security (that\'92s the \'93bouncer\'94). In such cases, you can contact the Interaction team to whitelist your endpoint or disable the bouncer for your account . For a hackathon MVP, you might just deploy to a reliable HTTPS host to avoid this issue.\
+\
+By the end of this step, Poke will be configured to send any relevant email triggers to our integration endpoint. Now we move to configuring the voice call agent.\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\b\fs30 \cf2 2. Configure the VAPI Voice Assistant (\'93Calli\'94)
+\f2\b0\fs28 \
+\
+Next, set up the AI voice agent that will perform the call. There are two ways to create a VAPI assistant: through the 
+\f3\b VAPI Dashboard UI
+\f2\b0  or via the 
+\f3\b API/SDK
+\f2\b0 .\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	
+\f3\b Using the Dashboard:
+\f2\b0  Log in to the VAPI Dashboard and navigate to the 
+\f4\i Assistants
+\f2\i0  section. Create a new assistant (give it a name like \'93Poke Scheduler\'94 or \'93Calli\'94). Choose the voice settings (e.g., select an English voice like \'93Elliot\'94 or any voice you prefer). In the assistant\'92s 
+\f3\b Prompt/Behavior configuration
+\f2\b0 , insert the system prompt designed for scheduling calls. This is the long prompt defining Calli\'92s identity and call script logic (the content provided in the JSON in the question). Ensure any placeholders for dynamic data are clearly marked. For example, the prompt might include lines like: 
+\f4\i \'93You are Calli, calling on behalf of [USER_NAME] to schedule or manage a booking based on [REQUEST_CONTEXT].\'94
+\f2\i0  You can use square brackets or curly braces for placeholders \'96 just be consistent with how you\'92ll replace them later. VAPI supports 
+\f5 \{\{variableName\}\}
+\f2  syntax in prompts for its 
+\f5 assistantOverrides.variableValues
+\f2  feature , so you might adapt the prompt to use that format (e.g., 
+\f5 \{\{userName\}\}
+\f2  instead of 
+\f5 [USER_NAME]
+\f2  in the text) to simplify replacements.\
+In the assistant config, also set the 
+\f3\b first message
+\f2\b0  (this is what the assistant says when the call is answered). In our case, something like \'93Hi, this is Calli calling on behalf of [User]. I\'92m looking to make a reservation\'85\'94 would be appropriate \'96 the system prompt already suggests call openers for restaurants, e.g., 
+\f4\i \'93Hi! I\'92m Calli calling for [USER_NAME]. Table for [PARTY_SIZE] on [DATE] around [TIME]\'85\'94
+\f2\i0  We can use a generic opener or have the assistant generate it from context.\
+Review any other settings (e.g., choose the transcriber for speech-to-text \'96 the JSON shows Deepgram Nova was used for transcribing the other party\'92s voice). The default or recommended transcriber can be used unless you need a specific one.\
+	\'95	
+\f3\b Using the API/SDK:
+\f2\b0  Alternatively, you can script the creation of the assistant. VAPI\'92s SDK allows creating an assistant with a single API call by providing a JSON payload of the config . For example (pseudo-code using Node SDK):
+\f0\fs24 \cf0 \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f6\fs28 \cf3 const\cf4  assistant = \cf3 await\cf4  vapi.assistants.create(\{\
+  \cf5 name\cf4 : \cf6 "Poke Scheduler Assistant"\cf4 ,\
+  \cf5 voice\cf4 : \{ \cf5 provider\cf4 : \cf6 "vapi"\cf4 , \cf5 voiceId\cf4 : \cf6 "Elliot"\cf4  \},\
+  \cf5 model\cf4 : \{\
+    \cf5 provider\cf4 : \cf6 "openai"\cf4 ,\
+    \cf5 model\cf4 : \cf6 "gpt-4o"\cf4 ,\
+    \cf5 temperature\cf4 : \cf9 0.2\cf4 ,\
+    \cf5 messages\cf4 : [\{ \cf5 role\cf4 : \cf6 "system"\cf4 , \cf5 content\cf4 : systemPromptText \}]\
+  \},\
+  \cf5 firstMessage\cf4 : \cf6 "Hi there! I'm calling to schedule an appointment."\cf4 \
+\});\
+console.log(\cf6 "Created assistant ID:"\cf4 , assistant.id);
+\f0\fs24 \cf0 \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\fi260\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f2\fs28 \cf2 This would programmatically set up the assistant. In practice, using the dashboard might be faster during the hack, but code is useful if you need to create/update the assistant dynamically or ensure the prompt is exactly as intended (especially if doing string interpolation for variables).\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+\cf2 \
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	
+\f3\b Testing the Assistant:
+\f2\b0  Before integrating everything, it\'92s wise to test the assistant\'92s behavior. VAPI allows making test calls in the dashboard or via a simple script. You could call a phone number you control (like your cell or a friend acting as the \'93restaurant\'94) to see how Calli speaks and responds. This lets you refine the prompt if needed (for example, adjusting how it asks for missing info or making the tone right). Ensure that the assistant indeed produces the final summary and JSON in the conversation \'96 VAPI transcripts or logs will show the assistant\'92s messages. If the JSON is not being produced, you may need to adjust the prompt (the system prompt we have already includes an explicit instruction to output a summary and JSON after the call).\
+\
+By the end of this step, we have a 
+\f3\b VAPI Assistant ID
+\f2\b0  (something like a UUID) for Calli, and a tested prompt that can handle reservations.\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\b\fs30 \cf2 3. Acquire a VAPI Phone Number and API Key
+\f2\b0\fs28 \
+\
+For the VAPI system to actually place calls, you need:\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	
+\f3\b VAPI API Credentials:
+\f2\b0  Get your API key from the VAPI dashboard (likely under account or API settings). This key will be used by our server to authenticate to VAPI\'92s API. If using the VAPI MCP remote, the key is passed as a bearer token .\
+	\'95	
+\f3\b Phone Number (Caller ID):
+\f2\b0  In the VAPI dashboard, navigate to the 
+\f4\i Phone Numbers
+\f2\i0  section. Claim or purchase a phone number (the docs mention a free number might be available , or perhaps a trial credit). Choose a number with voice capabilities in the relevant country (for a US restaurant, a US number). Once you have a number, note its 
+\f3\b ID
+\f2\b0  (in VAPI each number has an ID string) or the number itself if the API calls require it. For example, the 
+\f5 vapi.calls.create
+\f2  request needs a 
+\f5 phoneNumberId
+\f2  field which refers to the caller number\'92s ID .\
+\
+After this, you can also test an outbound call manually using the number and assistant:
+\f0\fs24 \cf0 \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f6\fs28 \cf7 # Example using VAPI CLI or curl to test call\cf4 \
+curl -X POST \cf6 "https://api.vapi.ai/call"\cf4  \\\
+  -H \cf6 "Authorization: Bearer <YOUR_VAPI_API_KEY>"\cf4  \\\
+  -H \cf6 "Content-Type: application/json"\cf4  \\\
+  -d \cf6 '\{\
+        "phoneNumberId": "<YOUR_VAPI_NUMBER_ID>",\
+        "customer": \{ "number": "<TARGET_PHONE_NUMBER>" \},\
+        "assistantId": "<YOUR_ASSISTANT_ID>"\
+      \}'
+\f0\fs24 \cf0 \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f2\fs28 \cf2 Replace 
+\f5 <TARGET_PHONE_NUMBER>
+\f2  with a test number (like your phone, formatted +1\'85). If all is set up, this should initiate a call where your assistant talks to you. This is a good end-to-end test of VAPI before wiring it into Poke. Verify that the call connects and the assistant\'92s voice comes through.\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\b\fs30 \cf2 4. Implement the Call Automation Logic in the MCP Server
+\f2\b0\fs28 \
+\
+Now comes the core development: connecting the dots so that when Poke triggers the automation, our code uses VAPI to make the call and then returns the results.\
+\
+If you used the 
+\f3\b MCP server template
+\f2\b0 , open its code (likely an Express.js or similar server). The template will have a handler for incoming requests from Poke. Typically, Poke will send a JSON payload that includes the 
+\f3\b email content or command text
+\f2\b0  and possibly some metadata. (It might look like 
+\f5 \{ "body": "Make me a reservation for 2 at Turoni's at 8:30PM on Friday. Here is their number: 812-555-1234", ... \}
+\f2  or some structured form if Poke did pre-processing. If it\'92s raw text, we\'92ll parse it ourselves.)\
+\
+Implement the logic as follows:\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	
+\f3\b Parse the Request Context:
+\f2\b0  Extract from the incoming data the relevant info. At minimum, we need the 
+\f3\b phone number to call
+\f2\b0  and the 
+\f3\b reservation request details
+\f2\b0 . If the user\'92s email is in a structured format (perhaps Poke encourages a format like \'93Call \{number\}: \{task\}\'94), parse accordingly. Otherwise, use simple heuristics:\
+\pard\tqr\tx500\tx660\li660\fi-400\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Use a regex or search to find a phone number in the text (e.g., pattern for 10-digit or with dashes, etc.). For example, 
+\f5 /\\+?\\d[\\d\\-\\s\\(\\)]\{7,\}/
+\f2  could find a phone number. Suppose we find 
+\f5 812-555-1234
+\f2 .\
+	\'95	Extract the remaining text as the context (e.g., \'93make me a reservation for 2 at Turoni\'92s at 8:30PM on Friday\'94).\
+	\'95	(Optional) If the user\'92s name is available (perhaps Poke includes the user\'92s name in the payload or we have it stored from config), get that as well. Otherwise, we might default to a name or use the email\'92s sender name. Having the 
+\f3\b user\'92s first name
+\f2\b0  is useful for the agent to say \'93calling on behalf of [Alice]\'94. For a quick solution, you might ask the user to include their name or set it in an env variable.\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	
+\f3\b Prepare VAPI Call Parameters:
+\f2\b0  Format the phone number to E.164 international format (e.g., 
+\f5 +18125551234
+\f2  for the example, assuming US country code). Ensure you have your 
+\f5 assistantId
+\f2  (Calli\'92s ID) and 
+\f5 phoneNumberId
+\f2  (the VAPI number). Also prepare the 
+\f3\b assistant overrides
+\f2\b0 :\
+\pard\tqr\tx500\tx660\li660\fi-400\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Construct a dictionary of variable values for the assistant. E.g.:
+\f0\fs24 \cf0 \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f6\fs28 \cf3 let\cf4  vars = \{\
+  \cf5 userName\cf4 : \cf6 "<UserName>"\cf4 ,\
+  \cf5 requestContext\cf4 : \cf6 "<Reservation request text>"\cf4 \
+  \cf7 // other fields like date, time, party_size could be extracted too\cf4 \
+\};
+\f0\fs24 \cf0 \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\fi260\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f2\fs28 \cf2 These keys (
+\f5 userName
+\f2 , 
+\f5 requestContext
+\f2 , etc.) should match the placeholders you used in the prompt (if you used 
+\f5 \{\{userName\}\}
+\f2  in the prompt, use that key). According to the VAPI MCP server docs, you would pass these under 
+\f5 assistantOverrides.variableValues
+\f2  in the create_call action .\
+\
+\pard\tqr\tx500\tx660\li660\fi-400\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	If you also want to inject the first user prompt to the conversation (like giving the AI a direct message of what the user wants), another way is to include an initial user-turn message in 
+\f5 assistantOverrides
+\f2 . However, since our assistant\'92s system prompt already knows to base itself on the request context, variable injection is enough.\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+\cf2 \
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	
+\f3\b Trigger the Outbound Call:
+\f2\b0  Use the VAPI SDK or API to create the call. If using the VAPI MCP server approach, you might not need to manually call the REST API \'96 you could use the MCP 
+\f3\b create_call action
+\f2\b0  directly. For example, if our MCP integration can call actions, we could send a tool call request like:
+\f0\fs24 \cf0 \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f6\fs28 \cf4 \{\
+  \cf5 "action"\cf4 : \cf6 "create_call"\cf4 ,\
+  \cf5 "parameters"\cf4 : \{\
+     \cf5 "phoneNumberId"\cf4 : \cf6 "..."\cf4 ,\
+     \cf5 "customer"\cf4 : \{ \cf5 "number"\cf4 : \cf6 "+18125551234"\cf4  \},\
+     \cf5 "assistantId"\cf4 : \cf6 "..."\cf4 ,\
+     \cf5 "assistantOverrides"\cf4 : \{\
+         \cf5 "variableValues"\cf4 : \{ \cf5 "userName"\cf4 : \cf6 "Alice"\cf4 , \cf5 "requestContext"\cf4 : \cf6 "reservation for 2 at Turoni's at 8:30 PM Fri"\cf4  \}\
+      \}\
+  \}\
+\}
+\f0\fs24 \cf0 \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\fi260\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f2\fs28 \cf2 The VAPI MCP server is built to handle such actions and interface with the VAPI API . In fact, the open-source VAPI MCP server code already supports 
+\f5 create_call
+\f2  with scheduling (immediate or future) and variable overrides . This means if our integration server is basically the VAPI MCP server, we just need to invoke that action with the right params when we receive the request from Poke.\
+If you\'92re writing this logic manually (say, in the template server route), you\'92d use the VAPI Node SDK:
+\f0\fs24 \cf0 \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f6\fs28 \cf3 const\cf4  result = \cf3 await\cf4  vapi.calls.create(\{\
+   \cf5 phoneNumberId\cf4 : VAPI_NUMBER_ID,\
+   \cf5 customer\cf4 : \{ \cf5 number\cf4 : targetNumber \},\
+   \cf5 assistantId\cf4 : VAPI_ASSISTANT_ID,\
+   \cf5 assistantOverrides\cf4 : \{ \cf5 variableValues\cf4 : vars \}\
+\});
+\f0\fs24 \cf0 \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\fi260\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f2\fs28 \cf2 This returns a 
+\f5 call
+\f2  object immediately (with an ID), but the call will proceed asynchronously.\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+\cf2 \
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	
+\f3\b Handle the Call Lifecycle:
+\f2\b0  The phone call will take some time (maybe 30-60 seconds). We need to wait for it to complete and get the outcome (the agent\'92s final messages). There are a couple of strategies:\
+\pard\tqr\tx500\tx660\li660\fi-400\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	
+\f3\b Poll for Completion:
+\f2\b0  After initiating, periodically check the call status via the API (e.g., 
+\f5 vapi.calls.get(call.id)
+\f2 ) to see if it\'92s finished. Once finished, retrieve the conversation transcripts or final assistant message. VAPI likely provides conversation logs; specifically, since our assistant is designed to output a summary at the end, we could scrape that from the call transcript. This is somewhat hacky during a hackathon but workable if no better method.\
+	\'95	
+\f3\b Webhooks/Callbacks:
+\f2\b0  A cleaner method is to use VAPI\'92s event webhooks. In the VAPI dashboard, you can set a 
+\f3\b Call webhook URL
+\f2\b0  for your number or assistant. VAPI will send an HTTP POST to that URL when certain events happen (call started, ended, etc.). We can set our server (the same MCP server) to receive these. For example, on call end, VAPI could POST the final transcript or a call record including the assistant\'92s last message. This would let us capture the summary/JSON. If using VAPI\'92s MCP server code, it might automatically capture tool results or have events we can hook into (to be confirmed in docs).\
+	\'95	
+\f3\b Streamable MCP Connection:
+\f2\b0  If using the streamable HTTP connection from Poke to VAPI\'92s MCP, it might allow a long-held connection where intermediate messages from the assistant can stream back to Poke. For instance, the integration could stream something like \'93Calling now\'85\'94 and then update with \'93Reservation confirmed at 8:30 PM, code ABC123.\'94 once done. Streamable HTTP is mentioned as the recommended transport , which suggests Poke might indeed support receiving a stream of outputs (similar to how an LLM would stream its answer). If this is the case, VAPI\'92s MCP server could proxy the assistant\'92s final message directly as output. However, implementing streaming might be complex under time constraints \'96 it\'92s an advanced bonus if possible.\
+\
+For the MVP, you might choose to 
+\f3\b simplify
+\f2\b0  by letting the integration respond to Poke only after the call completes (meaning Poke\'92s request might wait, possibly risking a timeout). If timeouts are an issue, an alternative is to immediately respond to Poke with a placeholder like \'93\uc0\u55357 \u56397  Okay, working on that\'85\'94 (so Poke/user knows the task started), and separately send the result via Poke\'92s API once ready. The challenge docs show how to send a message to Poke via API  . For example, after the call, our server can do:
+\f0\fs24 \cf0 \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f6\fs28 \cf4 requests.post(\
+  \cf6 'https://poke.com/api/v1/inbound-sms/webhook'\cf4 ,\
+  headers=\{ \cf6 'Authorization'\cf4 : \cf6 f'Bearer \cf8 \{POKE_API_KEY\}\cf6 '\cf4 , \cf6 'Content-Type'\cf4 : \cf6 'application/json'\cf4  \},\
+  json=\{ \cf6 'message'\cf4 : summaryText \}\
+)
+\f0\fs24 \cf0 \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f2\fs28 \cf2 This would make Poke act as if it received an SMS with the summary, which likely ends up in the user\'92s Poke chat or email thread . (This is somewhat of a hack to deliver the result out-of-band if we can\'92t directly respond through MCP due to async nature.)\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	
+\f3\b Parse and Format the Result:
+\f2\b0  Once the call is done, interpret the assistant\'92s output. Thanks to our structured JSON, we can easily parse it (e.g., 
+\f5 json.loads()
+\f2  in Python or 
+\f5 JSON.parse()
+\f2  in Node). Then format a nice human-readable confirmation for the user. For example: 
+\f4\i \'93\uc0\u55357 \u56542  I called Turoni\'92s and 
+\f7\b booked a table for 2 on Fri Sep 27 at 8:30 PM
+\f4\b0  under your name. Confirmation code: ABC123. They noted a 10-minute late grace period. Enjoy your dinner!\'94
+\f2\i0  We can also include any important policy notes (from the JSON) or next steps (if status was waitlisted or if they asked for a credit card hold, etc.). The automation should handle negative outcomes too: e.g., if no availability at that time, the assistant would have offered alternatives and maybe booked a different time or put the user on waitlist \'96 convey that outcome: 
+\f4\i \'93They were fully booked at 8:30, so I reserved 
+\f7\b 9:00 PM
+\f4\b0  instead. (You\'92re on the waitlist for 8:30 in case of cancellations.)\'94
+\f2\i0 .\
+	\'95	
+\f3\b Return/Send the Result:
+\f2\b0  Finally, deliver the result back to the user via Poke. If we managed to keep the MCP call open, we simply return a response that contains the final message (and possibly the JSON if Poke expects some structured data back). If we had to close early, then use the Poke API as mentioned to send a follow-up message. In any case, the user should get a confirmation in their Poke chat or email thread that the reservation is made or the outcome of the attempt.\
+\
+During implementation, use logs generously. Print out the incoming request from Poke (so you know what format to parse), and log the steps (found phone: X, calling now, etc.). Also log the VAPI call response and any events. This will greatly help debugging during the hack.\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\b\fs30 \cf2 5. Testing the End-to-End Flow
+\f2\b0\fs28 \
+\
+With everything in place, simulate the real usage:\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Compose an email to your Poke assistant (or a test trigger) that matches the format you expect. For example, send yourself an email with the subject \'93Dinner plans\'94 and body \'93Poke, please call 812-555-1234 to book a table for 2 at Turoni\'92s this Friday at 8:30pm. Thanks!\'94 (If you are a HackMIT participant, you might use the provided test email data if any was given by the challenge. The Interaction team hinted at some test data for incoming emails \'96 possibly on their site or via a provided dataset.)\
+	\'95	See if Poke routes it to your integration (check your server logs to confirm the request came in).\
+	\'95	Let the automation run: the server should initiate the call. You can even eavesdrop or look at VAPI\'92s live call transcript in the dashboard to see how the conversation goes.\
+	\'95	After call completion, verify that the user (you) got a message from Poke with the outcome. The message should be clear and contain the key info (date/time confirmed, any confirmation number or special notes).\
+	\'95	Test edge cases if possible: e.g., change the request to an unreasonable time to see if the restaurant says no (the agent should then propose alternates), or a request outside business hours (maybe goes to voicemail \'96 our agent is instructed to handle no-answer by leaving a callback request). Ensure the automation still responds properly (perhaps \'93I couldn\'92t reach them, I left a message to call back\'94 in the summary).\
+\
+If any part fails, debug and iterate:\
+	\'95	If Poke\'92s not triggering the integration, double-check the integration setup and whether the email met the trigger criteria.\
+	\'95	If the VAPI call fails to start, verify API keys and that your server has network access. Also ensure the phone number format is correct (VAPI expects 
+\f5 +
+\f2  and country code).\
+	\'95	If the assistant isn\'92t behaving as expected (e.g., not gathering info correctly), refine the prompt or check if our variable injection worked. You can add more structured parsing of the user request to provide the agent with structured hints (e.g., fill in a 
+\f5 partySize
+\f2  variable or date/time). Our initial lean approach was to give the agent a chunk of natural language context and let it handle it. For better accuracy, you could pre-parse details using an LLM or regex and feed them as structured variables (the system prompt even lists optional structured hints like [DATE_PREFS], [PARTY_SIZE] etc., which suggests the agent can take those if provided).\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\b\fs30 \cf2 6. Deployment and Final Touches
+\f2\b0\fs28 \
+\
+If you were testing locally, ensure you deploy the server and update the integration URL to the production one. With Vercel/Heroku, deployment is usually just a push or click (for the template). Set environment variables on the server: in particular your VAPI API key (and possibly Poke API key if you send messages back). Do not leave keys in code.\
+\
+Double-check the security: the MCP template likely includes an auth token or verification that requests come from Poke. Make sure that\'92s in place so random people can\'92t hit your endpoint and trigger calls. Poke might sign requests or provide a token in the integration settings.\
+\
+Finally, prepare a brief 
+\f3\b demo video or presentation
+\f2\b0  if required. Show the entire flow: you (the user) receiving an email from a friend like 
+\f4\i \'93Hey, let\'92s have dinner at Turoni\'92s Friday\'94
+\f2\i0 , you forwarding it to Poke or writing 
+\f4\i \'93Poke, book this for me\'94
+\f2\i0 , then Poke (your automation) making the call (perhaps play a recording of the call or live demo if possible), and the confirmation message appearing. This will impress judges with a clear real-world use case.\
+\
+Throughout this process, we leveraged existing resources heavily:\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	We used the 
+\f3\b official Poke MCP template
+\f2\b0  to avoid writing integration boilerplate .\
+	\'95	We utilized 
+\f3\b VAPI\'92s powerful voice AI SDK
+\f2\b0  instead of building a voice agent from scratch \'96 one POST call creates an outbound AI-driven call .\
+	\'95	We crafted the conversation logic via prompt engineering, rather than writing a complex state machine \'96 GPT-4 (via VAPI) handles the dialogue following our guidelines.\
+	\'95	We kept things lean by not integrating extraneous APIs (for MVP, we rely on calling the venue rather than, say, also syncing to a calendar or database). Those can be added later for even more functionality (for example, adding a Google Calendar tool from VAPI\'92s integrations to auto-save the reservation to the user\'92s calendar would be a cool extension  , but not necessary for the initial competition submission).\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\b\fs34 \cf2 Conclusion
+\f2\b0\fs28 \
+\
+By combining 
+\f3\b Poke\'92s email-to-action platform
+\f2\b0  with 
+\f3\b VAPI\'92s voice-calling AI
+\f2\b0 , our plan creates a seamless automation: a user can 
+\f4\i \'93poke\'94
+\f2\i0  their assistant with a simple request, and an AI voice will handle the tedious task of phone scheduling. We\'92ve outlined how to implement this step-by-step, using available GitHub repos and docs as references. This approach is highly extensible and demonstrates a compelling automation for the Poke challenge \'96 one that is technically impressive (GPT-4 voice calls with live dialogue) and practically useful (saves the user time and effort).\
+\
+With this game plan, you should be able to swiftly build a minimum viable product for the competition, leaving room to polish and maybe even tackle a second idea if time permits. Good luck, and happy hacking!\
+\
+
+\f3\b Sources:
+\f2\b0 \
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Poke HackMIT Challenge Overview   (Interaction Co. \'96 Poke.com)\
+	\'95	VAPI Official Documentation and GitHub (Voice AI Platform) \'96 e.g. Quickstart and API usage  \
+	\'95	VAPI MCP Server README (for using create_call with dynamic variables) .\
+	\'95	VAPI Custom Tools Guide (for reference on extending assistant capabilities)  .\
+	\'95	Poke API example (sending messages programmatically to Poke) .}
