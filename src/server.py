@@ -332,27 +332,19 @@ def get_server_info() -> dict:
     }
 
 if __name__ == "__main__":
-    import uvicorn
-    from fastmcp.server.uvicorn_server import UvicornServer
+    port = int(os.environ.get("PORT", 8000))
+    host = "0.0.0.0"
 
     print("🚀 [CALLI_POKE] Starting Calli Poke MCP Server (Python FastMCP)...")
     print(f"🔑 [CONFIG] VAPI Key: {'Present' if VAPI_API_KEY else 'Missing'}")
     print(f"📞 [CONFIG] VAPI Phone: {'Present' if VAPI_PHONE_ID else 'Missing'}")
     print(f"🤖 [CONFIG] VAPI Assistant: {'Present' if VAPI_ASSISTANT_ID else 'Missing'}")
     print(f"🌐 [CONFIG] Poke Key: {'Present' if POKE_API_KEY else 'Missing'}")
+    print(f"🌐 [SERVER] Starting FastMCP server on {host}:{port}")
 
-    # Get host and port from environment
-    port = int(os.environ.get("PORT", 8000))
-    host = "0.0.0.0"
-
-    print(f"🌐 [SERVER] Starting FastMCP HTTP server on {host}:{port}")
-
-    # Create uvicorn server with FastMCP
-    server = UvicornServer(mcp)
-
-    uvicorn.run(
-        server.app,
+    mcp.run(
+        transport="http",
         host=host,
         port=port,
-        log_level="info"
+        stateless_http=True
     )
