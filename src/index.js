@@ -57,6 +57,125 @@ function extractPhoneNumber(text) {
   return null;
 }
 
+// Send message back to Poke
+async function sendMessageToPoke(message) {
+  const POKE_API_KEY = process.env.POKE_API_KEY;
+
+  if (!POKE_API_KEY) {
+    console.log('📧 No Poke API key configured - skipping notification');
+    return;
+  }
+
+  try {
+    const response = await axios.post('https://poke.com/api/v1/inbound-sms/webhook', {
+      message: message
+    }, {
+      headers: {
+        'Authorization': `Bearer ${POKE_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    console.log('📧 Message sent to Poke successfully:', response.data);
+  } catch (error) {
+    console.error('❌ Failed to send message to Poke:', error.response?.data || error.message);
+  }
+}
+
+// Monitor call completion and notify Poke with results
+async function monitorCallAndNotifyPoke(callId, userIdentifier) {
+  console.log(`🔍 Starting call monitoring for ${callId} (user: ${userIdentifier})`);
+
+  let attempts = 0;
+  const maxAttempts = 30; // 5 minutes max monitoring
+
+  const monitorInterval = setInterval(async () => {
+    attempts++;
+
+    try {
+      const statusResponse = await vapiAxios.get(`/call/${callId}`);
+      const call = statusResponse.data;
+
+      if (['ended', 'failed', 'busy', 'no-answer'].includes(call.status)) {
+        clearInterval(monitorInterval);
+
+        // Generate summary message for Poke
+        let pokeMessage = `🤖 **Calli Call Complete** - ${userIdentifier}\n\n`;
+        pokeMessage += `📞 **Status**: ${call.status}\n`;
+        pokeMessage += `⏱️ **Duration**: ${call.duration || 0}s\n`;
+
+        if (call.status === 'ended') {
+          pokeMessage += `🎯 **Result**: ${call.endedReason || 'completed'}\n`;
+
+          if (call.summary) {
+            pokeMessage += `\n📋 **Summary**: ${call.summary}\n`;
+          }
+
+          if (call.transcript) {
+            // Check for successful booking indicators
+            const transcript = call.transcript.toLowerCase();
+            const hasBooking = transcript.includes('confirmed') || transcript.includes('booked') || transcript.includes('reservation');
+            const hasTime = transcript.match(/\d{1,2}:\d{2}|\d{1,2}\s*(am|pm)/i);
+
+            if (hasBooking && hasTime) {
+              pokeMessage += `\n✅ **Likely Success**: Booking language detected in conversation\n`;
+            }
+
+            // Add key conversation snippets
+            const sentences = call.transcript.split(/[.!?]+/).filter(s => s.trim().length > 10);
+            const keyPhrases = sentences.slice(0, 3).join('. ') + (sentences.length > 3 ? '...' : '');
+            pokeMessage += `\n💬 **Key Conversation**: "${keyPhrases}"\n`;
+          }
+
+          if (call.analysis?.successEvaluation) {
+            pokeMessage += `\n🤖 **AI Assessment**: ${call.analysis.successEvaluation}\n`;
+          }
+
+        } else {
+          pokeMessage += `\n❌ **Issue**: ${call.endedReason || 'Call was not successful'}\n`;
+
+          if (call.status === 'no-answer') {
+            pokeMessage += `💡 **Suggestion**: Try calling back later or check if the number is correct\n`;
+          } else if (call.status === 'busy') {
+            pokeMessage += `💡 **Suggestion**: The line was busy - the number is valid, try again soon\n`;
+          }
+        }
+
+        pokeMessage += `\n🔗 **Call ID**: ${callId}`;
+
+        // Send notification to Poke
+        await sendMessageToPoke(pokeMessage);
+
+        console.log(`✅ Call monitoring complete for ${callId} - notification sent to Poke`);
+
+      } else if (attempts >= maxAttempts) {
+        clearInterval(monitorInterval);
+
+        await sendMessageToPoke(
+          `⏰ **Calli Call Timeout** - ${userIdentifier}\n\n` +
+          `📞 Call ${callId} is still in progress after 5 minutes.\n` +
+          `Status: ${call.status}\n\n` +
+          `You can check the final results in your VAPI dashboard.`
+        );
+
+        console.log(`⏰ Call monitoring timeout for ${callId}`);
+      }
+
+    } catch (error) {
+      console.error(`❌ Error monitoring call ${callId}:`, error.message);
+
+      if (attempts >= maxAttempts) {
+        clearInterval(monitorInterval);
+
+        await sendMessageToPoke(
+          `❌ **Calli Monitoring Error** - ${userIdentifier}\n\n` +
+          `Unable to monitor call ${callId} - please check VAPI dashboard for results.`
+        );
+      }
+    }
+  }, 10000); // Check every 10 seconds
+}
+
 // Parse reservation request utility
 function parseReservationRequest(text, userName = 'User') {
   // Extract key information from the request text
@@ -180,8 +299,8 @@ app.post('/mcp', async (req, res) => {
       }
     });
 
-    // TODO: Set up webhook to monitor call completion and send results back to Poke
-    // For now, we'll implement basic polling in a separate endpoint
+    // Monitor call completion and send results back to Poke
+    monitorCallAndNotifyPoke(call.id, user?.email || userName);
 
   } catch (error) {
     console.error('❌ MCP request failed:', error.message);
