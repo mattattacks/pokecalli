@@ -358,6 +358,35 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Lightweight CORS and method discovery to satisfy clients that probe with GET/HEAD/OPTIONS
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, HEAD, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, MCP-Session-Id');
+  next();
+});
+
+// Friendly GET/HEAD/OPTIONS handlers for /mcp so external validators don't 404
+app.options('/mcp', (req, res) => {
+  res.setHeader('Allow', 'GET, POST, HEAD, OPTIONS');
+  return res.status(204).end();
+});
+
+app.head('/mcp', (req, res) => {
+  return res.status(200).end();
+});
+
+app.get('/mcp', (req, res) => {
+  return res.json({
+    status: 'ok',
+    server: 'Universal MCP Server',
+    protocol: 'JSON-RPC 2.0 over HTTP',
+    endpoint: '/mcp',
+    methods: ['POST'],
+    note: 'Send a POST JSON-RPC request with method="initialize" to begin the MCP handshake.'
+  });
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({
