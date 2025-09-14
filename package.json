@@ -2,10 +2,10 @@
   "name": "calli-poke",
   "version": "1.0.0",
   "description": "AI scheduling assistant that integrates Poke automations with VAPI voice AI for restaurant reservations",
-  "main": "src/mcp-server-poke.js",
+  "main": "src/mcp-server-universal.js",
   "type": "module",
   "scripts": {
-    "start": "node src/mcp-server-poke.js",
+    "start": "node src/mcp-server-universal.js",
     "start:original": "node src/mcp-server-fastmcp.js",
     "dev": "node --watch src/index.js",
     "test": "node --test",

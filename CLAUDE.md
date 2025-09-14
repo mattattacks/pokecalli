@@ -30,7 +30,7 @@ The project uses several API keys and IDs stored in `secrets.rtf`:
 
 ```
 vapi=8556bec9-72d2-4ef6-8239-92d07780088e
-vapi_phone=328097e2-8e76-433e-b900-d9b4ac3ad88b
+vapi_phone=097c870c-6ad5-49d4-ac10-844ebb43a8aa
 vapi_assistant=dca10f6b-d35f-4b9f-b2cd-05faa8671269
 poke=pk_VkD60f27TcHRdSwjY4dXUPvHeCssuM76Vzr71yPfkOI
 ```

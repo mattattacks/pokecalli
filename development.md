@@ -189,7 +189,7 @@ Email Request -> Poke Platform -> MCP Integration -> VAPI Call -> Restaurant -> 
 ### Required Credentials
 - Use existing API keys from secrets.rtf:
   - VAPI API key: `8556bec9-72d2-4ef6-8239-92d07780088e`
-  - VAPI phone ID: `328097e2-8e76-433e-b900-d9b4ac3ad88b`
+  - VAPI phone ID: `097c870c-6ad5-49d4-ac10-844ebb43a8aa`
   - VAPI assistant ID: `dca10f6b-d35f-4b9f-b2cd-05faa8671269`
   - Poke API key: `pk_VkD60f27TcHRdSwjY4dXUPvHeCssuM76Vzr71yPfkOI`
 
