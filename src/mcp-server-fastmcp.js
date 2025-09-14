@@ -140,10 +140,14 @@ const host = "0.0.0.0";
 
 console.log(`Starting FastMCP server on ${host}:${port}`);
 
+// Start FastMCP server with httpStream transport
 server.start({
   transportType: "httpStream",
   httpStream: {
     port: port,
-    endpoint: "/mcp"
+    endpoint: "/mcp",
+    host: host
   }
 });
+
+console.log(`FastMCP server running on ${host}:${port}/mcp`);
