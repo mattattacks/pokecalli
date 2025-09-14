@@ -339,8 +339,13 @@ if __name__ == "__main__":
     print(f"🌐 [CONFIG] Poke Key: {'Present' if POKE_API_KEY else 'Missing'}")
 
     # Get host and port from environment
-    host = os.getenv("HOST", "0.0.0.0")
-    port = int(os.getenv("PORT", 8000))
+    port = int(os.environ.get("PORT", 8000))
+    host = "0.0.0.0"
 
-    print(f"🌐 [SERVER] Starting on {host}:{port}")
-    mcp.run(host=host, port=port)
+    print(f"🌐 [SERVER] Starting FastMCP HTTP server on {host}:{port}")
+    mcp.run(
+        transport="http",
+        host=host,
+        port=port,
+        stateless_http=True
+    )
