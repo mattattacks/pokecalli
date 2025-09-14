@@ -5,14 +5,11 @@
  * Following the Model Context Protocol specification
  */
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ErrorCode,
-  ListToolsRequestSchema,
-  McpError,
-} from "@modelcontextprotocol/sdk/types.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
 
 import dotenv from 'dotenv';
 import axios from 'axios';
@@ -35,79 +32,34 @@ const vapiAxios = axios.create({
   }
 });
 
-class CalliMcpServer {
-  constructor() {
-    this.server = new Server(
-      {
-        name: "calli-poke",
-        version: "1.0.0",
-      },
-      {
-        capabilities: {
-          tools: {},
-        },
-      }
-    );
+// Map to store transports by session ID for stateful connections
+const transports = {};
 
-    this.setupToolHandlers();
-    this.setupErrorHandling();
-  }
+function createMcpServer() {
+  const server = new McpServer({
+    name: "calli-poke",
+    version: "1.0.0",
+  });
 
-  setupToolHandlers() {
-    // List available tools
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: [
-        {
-          name: "make_phone_call",
-          description: "Make a phone call to schedule appointments at restaurants, medical offices, salons, or any business",
-          inputSchema: {
-            type: "object",
-            properties: {
-              phone_number: {
-                type: "string",
-                description: "Phone number to call (e.g., '619-853-2051' or '+1-619-853-2051')"
-              },
-              request_message: {
-                type: "string",
-                description: "What you want to schedule (e.g., 'book a table for 2 at Luigi's tonight at 7:30 PM')"
-              },
-              user_name: {
-                type: "string",
-                description: "Name of the person making the appointment",
-                default: "Customer"
-              }
-            },
-            required: ["phone_number", "request_message"],
-          },
-        }
-      ],
-    }));
+  // Register the make_phone_call tool
+  server.tool(
+    "make_phone_call",
+    "Make a phone call to schedule appointments at restaurants, medical offices, salons, or any business",
+    {
+      phone_number: z.string().describe("Phone number to call (e.g., '619-853-2051' or '+1-619-853-2051')"),
+      request_message: z.string().describe("What you want to schedule (e.g., 'book a table for 2 at Luigi's tonight at 7:30 PM')"),
+      user_name: z.string().optional().describe("Name of the person making the appointment").default("Customer")
+    },
+    async ({ phone_number, request_message, user_name = "Customer" }) => {
+      return await makePhoneCall({ phone_number, request_message, user_name });
+    }
+  );
 
-    // Handle tool calls
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const { name, arguments: args } = request.params;
+  return server;
+}
 
-      try {
-        switch (name) {
-          case "make_phone_call":
-            return await this.makePhoneCall(args);
-          default:
-            throw new McpError(
-              ErrorCode.MethodNotFound,
-              `Unknown tool: ${name}`
-            );
-        }
-      } catch (error) {
-        throw new McpError(
-          ErrorCode.InternalError,
-          `Error executing ${name}: ${error.message}`
-        );
-      }
-    });
-  }
-
-  async makePhoneCall(args) {
-    const { phone_number, request_message, user_name = "Customer" } = args;
+async function makePhoneCall(args) {
+  const { phone_number, request_message, user_name = "Customer" } = args;
 
     // Parse phone number to E.164 format
     let cleanPhone = phone_number.replace(/[^\d+]/g, '');
@@ -202,60 +154,55 @@ Calli AI is now making the call. You'll receive a follow-up message with the res
     }
   }
 
-  setupErrorHandling() {
-    this.server.onerror = (error) => console.error("[MCP Error]", error);
-    process.on("SIGINT", async () => {
-      await this.server.close();
-      process.exit(0);
-    });
-  }
+// Express server setup with proper MCP integration
+function startHttpServer(port = 8000) {
+  const app = express();
+  app.use(express.json());
 
-  async runStdio() {
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
-    console.error("Calli Poke MCP server running on stdio");
-  }
+  // Health check endpoint
+  app.get('/health', (req, res) => {
+    res.json({ status: 'healthy', service: 'Calli Poke MCP Server' });
+  });
 
-  async runHttp(port = 8000) {
-    const app = express();
-    app.use(express.json());
+  // MCP endpoint with session management
+  app.post('/mcp', async (req, res) => {
+    try {
+      const sessionId = req.headers['mcp-session-id'];
+      let transport;
 
-    // MCP endpoint
-    app.post('/mcp', async (req, res) => {
-      try {
-        // Handle MCP requests over HTTP
-        const { method, params } = req.body;
+      if (sessionId && transports[sessionId]) {
+        // Reuse existing transport
+        transport = transports[sessionId];
+        transport.handleRequest(req, res);
+      } else if (!sessionId && isInitializeRequest(req.body)) {
+        // New initialization request - create new server and transport
+        const server = createMcpServer();
+        transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID()
+        });
 
-        if (method === 'tools/list') {
-          const tools = await this.server.request(ListToolsRequestSchema, {});
-          res.json(tools);
-        } else if (method === 'tools/call') {
-          const result = await this.server.request(CallToolRequestSchema, params);
-          res.json(result);
-        } else {
-          res.status(400).json({ error: 'Unknown MCP method' });
-        }
-      } catch (error) {
-        res.status(500).json({ error: error.message });
+        // Store transport for session
+        const newSessionId = transport.sessionId || randomUUID();
+        transports[newSessionId] = transport;
+
+        // Connect server to transport
+        await server.connect(transport);
+        transport.handleRequest(req, res);
+      } else {
+        res.status(400).json({ error: 'Invalid MCP request' });
       }
-    });
+    } catch (error) {
+      console.error('MCP request error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
 
-    // Health check
-    app.get('/health', (req, res) => {
-      res.json({ status: 'healthy', service: 'Calli Poke MCP Server' });
-    });
-
-    app.listen(port, '0.0.0.0', () => {
-      console.log(`Calli Poke MCP server running on port ${port}`);
-    });
-  }
+  app.listen(port, '0.0.0.0', () => {
+    console.log(`Calli Poke MCP server running on port ${port}`);
+  });
 }
 
-// Start server
-const server = new CalliMcpServer();
-
-if (process.env.NODE_ENV === 'production') {
-  server.runHttp(process.env.PORT || 10000);
-} else {
-  server.runStdio();
-}
+// Start the server
+const port = process.env.PORT || 8000;
+console.log(`Starting Calli Poke MCP Server on port ${port}`);
+startHttpServer(port);
