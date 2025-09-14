@@ -1,12 +1,12 @@
-FROM node:20-alpine
+FROM python:3.13-slim
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy requirements file
+COPY requirements.txt ./
 
 # Install dependencies
-RUN npm install --omit=dev
+RUN pip install -r requirements.txt
 
 # Copy source code
 COPY . .
@@ -14,5 +14,5 @@ COPY . .
 # Expose port used by the app (Render sets PORT env var automatically)
 EXPOSE 10000
 
-# Run the universal MCP server explicitly (JSON-RPC + REST)
-CMD ["node", "src/mcp-server-universal.js"]
+# Run the FastMCP server
+CMD ["python", "src/server.py"]
