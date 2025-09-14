@@ -11,8 +11,8 @@ RUN npm install --omit=dev
 # Copy source code
 COPY . .
 
-# Expose port
+# Expose port used by the app (Render sets PORT env var automatically)
 EXPOSE 10000
 
-# Start the application
-CMD ["npm", "start"]
+# Run the universal MCP server explicitly (JSON-RPC + REST)
+CMD ["node", "src/mcp-server-universal.js"]
